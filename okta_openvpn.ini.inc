@@ -22,3 +22,5 @@ Token:
 ## Values below are what are set by default:
 # MFAPushMaxRetries: 20
 # MFAPushDelaySeconds: 3
+## Configure VPN Okta Acces Group
+# VpnGroup: 00g1esh0tyj5R0xmH0h8
