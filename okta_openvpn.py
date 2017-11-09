@@ -49,9 +49,9 @@ log.addHandler(syslog)
 # errlog.setFormatter(logging.Formatter(syslog_fmt))
 # log.addHandler(errlog)
 # # Uncomment to enable logging to a file
-# filelog = logging.FileHandler('/tmp/okta_openvpn.log')
-# filelog.setFormatter(logging.Formatter(syslog_fmt))
-# log.addHandler(filelog)
+filelog = logging.FileHandler('/var/log/okta_openvpn.log')
+filelog.setFormatter(logging.Formatter(syslog_fmt))
+log.addHandler(filelog)
 
 
 class PinError(Exception):
@@ -96,7 +96,7 @@ class PublicKeyPinsetConnectionPool(urllib3.HTTPSConnectionPool):
 
 
 class OktaAPIAuth(object):
-    def __init__(self, okta_url, okta_token,
+    def __init__(self, okta_url, okta_token, okta_group,
                  username, password, client_ipaddr,
                  mfa_push_delay_secs=None,
                  mfa_push_max_retries=None,
@@ -111,6 +111,7 @@ class OktaAPIAuth(object):
         self.okta_urlparse = urlparse.urlparse(okta_url)
         self.mfa_push_delay_secs = mfa_push_delay_secs
         self.mfa_push_max_retries = mfa_push_max_retries
+        self.okta_group = okta_group
         if assert_pinset is None:
             assert_pinset = okta_pinset
         url_new = (self.okta_urlparse.scheme,
@@ -147,6 +148,22 @@ class OktaAPIAuth(object):
         )
         return json.loads(req.data)
 
+    def okta_req_group(self, path):
+        ssws = "SSWS {token}".format(token=self.okta_token)
+        headers = {
+            'user-agent': user_agent,
+            'content-type': 'application/json',
+            'accept': 'application/json',
+            'authorization': ssws,
+            }
+        url = "{base}/api/v1{path}".format(base=self.okta_url, path=path)
+        req = self.pool.urlopen(
+            'GET',
+            url,
+            headers=headers
+        )
+        return json.loads(req.data)
+
     def preauth(self):
         path = "/authn"
         data = {
@@ -164,11 +181,30 @@ class OktaAPIAuth(object):
         }
         return self.okta_req(path, data)
 
+    def check_group(self):
+        path = "/users/" + self.username + "/groups"
+        return self.okta_req_group(path)
+
     def auth(self):
         username = self.username
         password = self.password
         status = False
         rv = False
+        cg = False
+        cg = self.check_group()
+        member_group = False
+        x = 0
+        while x < len(cg):
+            try:
+                if cg[x]['id'] == self.okta_group:
+                    member_group = True
+                x += 1
+            except Exception as e:
+                log.error('Unexpected error with the Okta API: %s', e)
+                return False
+        if not member_group:
+            log.info('User %s is not a member to OktaVpnGroup', username)
+            return False
 
         invalid_username_or_password = (
             username is None or
@@ -296,6 +332,7 @@ class OktaOpenVPNValidator(object):
                                                         'MFAPushMaxRetries'),
                         'mfa_push_delay_secs': cfg.get('OktaAPI',
                                                        'MFAPushDelaySeconds'),
+                        'okta_group': cfg.get('OktaAPI', 'VpnGroup'),
                         }
                     always_trust_username = cfg.get(
                         'OktaAPI',
@@ -347,6 +384,7 @@ class OktaOpenVPNValidator(object):
             'username': username,
             'password': password,
             'client_ipaddr': client_ipaddr,
+            'okta_group': self.site_config['okta_group']
         }
         for item in ['mfa_push_max_retries', 'mfa_push_delay_secs']:
             if item in self.site_config:
