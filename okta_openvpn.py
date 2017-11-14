@@ -190,21 +190,6 @@ class OktaAPIAuth(object):
         password = self.password
         status = False
         rv = False
-        cg = False
-        cg = self.check_group()
-        member_group = False
-        x = 0
-        while x < len(cg):
-            try:
-                if cg[x]['id'] == self.okta_group:
-                    member_group = True
-                x += 1
-            except Exception as e:
-                log.error('Unexpected error with the Okta API: %s', e)
-                return False
-        if not member_group:
-            log.info('User %s is not a member to OktaVpnGroup', username)
-            return False
 
         invalid_username_or_password = (
             username is None or
@@ -216,6 +201,22 @@ class OktaAPIAuth(object):
                      "Reported username may be 'None' due to this",
                      username,
                      self.client_ipaddr)
+            return False
+
+        cg = False
+        cg = self.check_group()
+        member_group = False
+        x = 0
+        while x < len(cg):
+            try:
+                if cg[x]['id'] in self.okta_group:
+                    member_group = True
+                x += 1
+            except Exception as e:
+                log.error('Unexpected error GET response returns: %s', e)
+                return False
+        if not member_group:
+            log.info('User %s is not a member to OktaVpnGroup', username)
             return False
 
         if not self.passcode:
@@ -332,7 +333,7 @@ class OktaOpenVPNValidator(object):
                                                         'MFAPushMaxRetries'),
                         'mfa_push_delay_secs': cfg.get('OktaAPI',
                                                        'MFAPushDelaySeconds'),
-                        'okta_group': cfg.get('OktaAPI', 'VpnGroup'),
+                        'okta_group': cfg.get('OktaAPI', 'VpnGroup').split(','),
                         }
                     always_trust_username = cfg.get(
                         'OktaAPI',
