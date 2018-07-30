@@ -41,7 +41,7 @@ user_agent = ("OktaOpenVPN/{version} "
 log = logging.getLogger('okta_openvpn')
 log.setLevel(logging.DEBUG)
 syslog = logging.handlers.SysLogHandler()
-syslog_fmt = "%(module)s-%(processName)s[%(process)d]: %(name)s: %(message)s"
+syslog_fmt = "%(asctime)s: %(module)s-%(processName)s[%(process)d]: %(name)s: %(message)s"
 syslog.setFormatter(logging.Formatter(syslog_fmt))
 log.addHandler(syslog)
 # # Uncomment to enable logging to STDERR
